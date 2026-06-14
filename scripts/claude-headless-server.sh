@@ -25,6 +25,8 @@ Commands:
   install     Clone repo + install dependencies
   uninstall   Remove everything cleanly (no traces)
   logs        Tail server logs
+  tui         Start server and connect OpenTUI
+  tunnel      SSH port forward (requires tunnel.conf)
 
 Config (environment variables):
   CLAUDE_SERVER_HOME  Server directory (default: ~/.claude-headless-server)
@@ -169,6 +171,26 @@ case "$cmd" in
     else
       echo "No log file. Start the server first."
     fi
+    ;;
+
+  tui)
+    # Check if server is running; start if not
+    if [ ! -f "$PID_FILE" ] || ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+      echo "==> Server not running. Starting..."
+      bash "$0" start
+    fi
+    cat <<EOF
+
+=== Claude Code Headless Server ===
+Server running on http://localhost:$PORT
+
+To connect OpenTUI:
+  Option 1: Set OPENCODE_SERVER=http://localhost:$PORT then run: claude --opencode
+  Option 2: npx opencode --server http://localhost:$PORT
+  Option 3: Configure your OpenTUI client to use http://localhost:$PORT
+
+Stop server with: claude-headless-server stop
+EOF
     ;;
 
   uninstall)
