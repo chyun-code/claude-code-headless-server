@@ -11,6 +11,22 @@ import {
   handlePtyMessage,
   handlePtyClose,
 } from "./routes/pty-proxy";
+import {
+  agentRoutes,
+  commandRoutes,
+  modelRoutes,
+  providerRoutes,
+  locationRoutes,
+  sessionExtraRoutes,
+  permissionRoutes,
+  questionRoutes,
+  fsRoutes,
+  skillRoutes,
+  referenceRoutes,
+  integrationRoutes,
+  credentialRoutes,
+  projectCopyRoutes,
+} from "./routes/opencode-compat";
 
 export { eventBus };
 
@@ -28,6 +44,22 @@ app.route("/", sessionRoutes);
 app.route("/", eventRoutes);
 app.route("/", messageRoutes);
 app.route("/", ptyRoutes);
+
+// OpenCode compatibility endpoints
+app.route("/", agentRoutes);
+app.route("/", commandRoutes);
+app.route("/", modelRoutes);
+app.route("/", providerRoutes);
+app.route("/", locationRoutes);
+app.route("/", sessionExtraRoutes);
+app.route("/", permissionRoutes);
+app.route("/", questionRoutes);
+app.route("/", fsRoutes);
+app.route("/", skillRoutes);
+app.route("/", referenceRoutes);
+app.route("/", integrationRoutes);
+app.route("/", credentialRoutes);
+app.route("/", projectCopyRoutes);
 
 app.onError((err, c) => {
   console.error("[server] error:", err);
