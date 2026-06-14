@@ -46,9 +46,6 @@ export function* mapClaudeToOpenCode(
       if (event.subtype === "init") {
         yield {
           ...base,
-        };
-        yield {
-          ...base,
           type: "session.next.agent.switched",
           data: {
             sessionID,
@@ -109,6 +106,28 @@ export function* mapClaudeToOpenCode(
     }
 
     case "result": {
+      // ADR 0002: Emit permission denial events for semantic integration
+      const denials = (event as any).permission_denials as Array<{
+        tool_name: string; tool_use_id: string; tool_input: unknown;
+      }> | undefined;
+      if (denials && denials.length > 0) {
+        for (const denial of denials) {
+          yield {
+            ...base,
+            type: "session.next.tool.permission_denied",
+            data: {
+              sessionID,
+              assistantMessageID,
+              callID: denial.tool_use_id,
+              tool: denial.tool_name,
+              input: denial.tool_input,
+              message: `Permission denied for ${denial.tool_name}. Switch OpenTUI mode to approve.`,
+              timestamp: new Date().toISOString(),
+            },
+          };
+        }
+      }
+
       if (event.is_error) {
         yield {
           ...base,
@@ -135,6 +154,7 @@ export function* mapClaudeToOpenCode(
               reasoning: 0,
               cache: { read: 0, write: 0 },
             },
+            permissionDenials: denials?.length ?? 0,
             timestamp: new Date().toISOString(),
           },
         };
