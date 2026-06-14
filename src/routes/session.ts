@@ -14,6 +14,21 @@ import {
 } from "../store";
 import type { PermissionMode } from "../store";
 
+// Session-level lock to prevent concurrent Claude Code processes
+const sessionLocks = new Map<string, Promise<void>>();
+
+function withSessionLock(sessionID: string, fn: () => Promise<void>): void {
+  const prev = sessionLocks.get(sessionID) ?? Promise.resolve();
+  const next = prev.then(fn, fn); // run even if previous failed
+  sessionLocks.set(sessionID, next);
+  // Cleanup after completion
+  next.finally(() => {
+    if (sessionLocks.get(sessionID) === next) {
+      sessionLocks.delete(sessionID);
+    }
+  });
+}
+
 export const sessionRoutes = new Hono()
   .post("/api/session", async (c) => {
     const body = await c.req.json().catch(() => ({}));
@@ -111,9 +126,9 @@ export const sessionRoutes = new Hono()
       timeCreated: Date.now(),
     };
 
-    // Spawn Claude Code if resume !== false
+    // Spawn Claude Code if resume !== false (with session lock)
     if (body.resume !== false) {
-      void (async () => {
+      withSessionLock(sessionID, async () => {
         try {
           const currentSession = getSession(sessionID)!;
           console.error(`[session] spawning Claude for ${sessionID} (turn ${currentSession.turnCount}, mode: ${currentSession.permissionMode})`);
@@ -144,7 +159,7 @@ export const sessionRoutes = new Hono()
         } catch (err) {
           console.error("[session] Claude relay error:", err);
         }
-      })();
+      });
     }
 
     return c.json({ data: admitted }, 202);
