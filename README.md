@@ -1,9 +1,9 @@
 # Claude Code Headless Server
 
-Programmable HTTP API for Claude Code — semantic integration with OpenTUI. **Full Claude Code functionality preserved:** permission modes, slash commands, tool execution, multi-turn sessions.
+Programmable HTTP API for Claude Code — semantic integration with OpenTUI. Permission modes, tool execution, multi-turn sessions, and clean single-directory deployment.
 
-> **v0.1.0** — Phase 1 complete: core HTTP API + SSE relay + --resume multi-turn + permission mode mapping.  
-> See [CHANGELOG](#) | [ADR Index](docs/adr/) | [Issues](https://github.com/chyun-code/claude-code-headless-server/issues)
+> **v0.1.2** — Phase 1 complete: core HTTP API + SSE relay + `--resume` multi-turn + permission mode mapping.  
+> See [Releases](https://github.com/chyun-code/claude-code-headless-server/releases) | [ADR Index](docs/adr/) | [Issues](https://github.com/chyun-code/claude-code-headless-server/issues)
 
 ## Architecture
 
@@ -19,17 +19,43 @@ Programmable HTTP API for Claude Code — semantic integration with OpenTUI. **F
 
 Each prompt is a fresh `claude -p` invocation. Session continuity via `--resume`. Permission modes map semantically between OpenTUI and Claude Code.
 
-## Quick Start
+## Quick Install
 
 ```bash
+# One line — everything in ~/.claude-headless-server
+curl -fsSL https://raw.githubusercontent.com/chyun-code/claude-code-headless-server/main/install.sh | bash
+```
+
+Or manually:
+
+```bash
+git clone https://github.com/chyun-code/claude-code-headless-server.git ~/.claude-headless-server
+cd ~/.claude-headless-server
 bun install
-bun run src/index.ts
-# Server on http://localhost:4096
+./scripts/claude-headless-server.sh start
 ```
 
 > **Requirements:** Bun, Claude Code CLI (authenticated). Non-root user recommended for `bypassPermissions` mode.
 
-## API (v0.1.0)
+## Usage
+
+```bash
+claude-headless-server start      # Start server (background)
+claude-headless-server status     # Check if running
+claude-headless-server stop       # Stop server
+claude-headless-server restart    # Stop + start
+claude-headless-server logs       # Tail server logs
+```
+
+## Uninstall
+
+```bash
+claude-headless-server uninstall
+```
+
+**Removes ONLY `~/.claude-headless-server`.** No other files touched. No scattered config. No `/etc` pollution. No shell rc modifications. No irreversible system changes. Just one `rm -rf` of a single directory.
+
+## API (v0.1.2)
 
 | Endpoint | Status | Description |
 |---|---|---|
@@ -39,7 +65,7 @@ bun run src/index.ts
 | `GET /api/session/:id` | ✅ | Session info |
 | `PATCH /api/session/:id` | ✅ | Update mode/config |
 | `POST /api/session/:id/prompt` | ✅ | Send prompt → spawns Claude |
-| `POST /api/session/:id/respond` | ✅ | Permission response (Phase 2 full relay) |
+| `POST /api/session/:id/respond` | ✅ | Accepts permission response (full interactive relay in Phase 2) |
 | `GET /api/event` (SSE) | ✅ | Real-time event stream |
 | `GET /api/pty/:id/connect` (WS) | 🚧 | Basic pipe, PTY emulation in Phase 2 |
 
@@ -76,62 +102,8 @@ Mode switches via `PATCH /api/session/:id {"permissionMode":"acceptEdits"}` or p
 |---|---|
 | [0001](docs/adr/0001-use-hono-and-claude-code-headless.md) | Use Hono + Claude Code Headless |
 | [0002](docs/adr/0002-permission-mode-semantic-mapping.md) | Semantic Permission Mode Mapping |
+| [0003](docs/adr/0003-single-directory-deployment.md) | Single-Directory Deployment & Clean Uninstall |
 
 ## License
 
 MIT
-
-## Quick Install
-
-```bash
-# One line — everything in ~/.claude-headless-server
-curl -fsSL https://raw.githubusercontent.com/chyun-code/claude-code-headless-server/main/install.sh | bash
-```
-
-Or manually:
-
-```bash
-git clone https://github.com/chyun-code/claude-code-headless-server.git ~/.claude-headless-server
-cd ~/.claude-headless-server
-bun install
-./scripts/claude-headless-server.sh start
-```
-
-## Usage
-
-```bash
-claude-headless-server install    # One-time setup
-claude-headless-server start      # Start server (background)
-claude-headless-server status     # Check if running
-claude-headless-server stop       # Stop server
-claude-headless-server restart    # Stop + start
-claude-headless-server logs       # Tail server logs
-claude-headless-server uninstall  # Remove everything cleanly ✨
-```
-
-## Uninstall
-
-```bash
-# Removes ONLY ~/.claude-headless-server. No other files touched.
-claude-headless-server uninstall
-```
-
-Thats
-
-## Quick Install
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/chyun-code/claude-code-headless-server/main/install.sh | bash
-```
-
-## Usage
-
-```bash
-claude-headless-server start      # Start server (background)
-claude-headless-server status     # Check if running
-claude-headless-server stop       # Stop server
-claude-headless-server logs       # Tail server logs
-claude-headless-server uninstall  # Remove everything cleanly
-```
-
-Uninstall removes ONLY `~/.claude-headless-server`. No other files touched. No scattered config. No irreversible changes.
