@@ -80,3 +80,58 @@ Mode switches via `PATCH /api/session/:id {"permissionMode":"acceptEdits"}` or p
 ## License
 
 MIT
+
+## Quick Install
+
+```bash
+# One line — everything in ~/.claude-headless-server
+curl -fsSL https://raw.githubusercontent.com/chyun-code/claude-code-headless-server/main/install.sh | bash
+```
+
+Or manually:
+
+```bash
+git clone https://github.com/chyun-code/claude-code-headless-server.git ~/.claude-headless-server
+cd ~/.claude-headless-server
+bun install
+./scripts/claude-headless-server.sh start
+```
+
+## Usage
+
+```bash
+claude-headless-server install    # One-time setup
+claude-headless-server start      # Start server (background)
+claude-headless-server status     # Check if running
+claude-headless-server stop       # Stop server
+claude-headless-server restart    # Stop + start
+claude-headless-server logs       # Tail server logs
+claude-headless-server uninstall  # Remove everything cleanly ✨
+```
+
+## Uninstall
+
+```bash
+# Removes ONLY ~/.claude-headless-server. No other files touched.
+claude-headless-server uninstall
+```
+
+Thats
+
+## Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chyun-code/claude-code-headless-server/main/install.sh | bash
+```
+
+## Usage
+
+```bash
+claude-headless-server start      # Start server (background)
+claude-headless-server status     # Check if running
+claude-headless-server stop       # Stop server
+claude-headless-server logs       # Tail server logs
+claude-headless-server uninstall  # Remove everything cleanly
+```
+
+Uninstall removes ONLY `~/.claude-headless-server`. No other files touched. No scattered config. No irreversible changes.
