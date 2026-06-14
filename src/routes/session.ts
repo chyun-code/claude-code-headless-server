@@ -222,6 +222,36 @@ export const sessionRoutes = new Hono()
     }, 202);
   })
 
-  .post("/api/session/:sessionID/compact", (c) => c.body(null, 204))
-  .post("/api/session/:sessionID/wait", (c) => c.body(null, 204))
-  .get("/api/session/:sessionID/context", (c) => c.json({ data: [] }));
+  .post("/api/session/:sessionID/compact", (c) => {
+    const { sessionID } = c.req.param();
+    eventBus.publish(sessionID, {
+      id: `evt_${Date.now().toString(36)}`,
+      type: "session.updated",
+      location: { directory: process.cwd() },
+      data: { sessionID, timestamp: new Date().toISOString() },
+    });
+    return c.json({ data: { id: sessionID, status: "compacted" } });
+  })
+  .post("/api/session/:sessionID/wait", (c) => {
+    const { sessionID } = c.req.param();
+    const session = getSession(sessionID);
+    return c.json({
+      data: {
+        id: sessionID,
+        status: session ? "ready" : "not_found",
+        turnCount: session?.turnCount ?? 0,
+      },
+    });
+  })
+  .get("/api/session/:sessionID/context", (c) => {
+    const { sessionID } = c.req.param();
+    const session = getSession(sessionID);
+    return c.json({
+      data: {
+        id: sessionID,
+        tokenCount: 0,
+        messageCount: session?.turnCount ?? 0,
+        contextWindow: 200000,
+      },
+    });
+  });

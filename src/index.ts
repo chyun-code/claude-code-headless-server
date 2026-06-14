@@ -17,7 +17,6 @@ import {
   modelRoutes,
   providerRoutes,
   locationRoutes,
-  sessionExtraRoutes,
   permissionRoutes,
   questionRoutes,
   fsRoutes,
@@ -51,7 +50,6 @@ app.route("/", commandRoutes);
 app.route("/", modelRoutes);
 app.route("/", providerRoutes);
 app.route("/", locationRoutes);
-app.route("/", sessionExtraRoutes);
 app.route("/", permissionRoutes);
 app.route("/", questionRoutes);
 app.route("/", fsRoutes);

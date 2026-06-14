@@ -4,8 +4,6 @@
 // ADR 0006: Protocol adapter — maps OpenCode API to our internal API.
 
 import { Hono } from "hono";
-import { eventBus } from "./event";
-import { listSessions, getSession } from "../store";
 
 const COMPAT_VERSION = "0.3.0";
 
@@ -100,43 +98,6 @@ export const locationRoutes = new Hono().get("/api/location", (c) => {
     },
   });
 });
-
-// --- Session: compact ---
-export const sessionExtraRoutes = new Hono()
-  .post("/api/session/:sessionID/compact", (c) => {
-    const { sessionID } = c.req.param();
-    eventBus.publish(sessionID, {
-      id: `evt_${Date.now().toString(36)}`,
-      type: "session.updated",
-      location: { directory: process.cwd() },
-      data: { sessionID, timestamp: new Date().toISOString() },
-    });
-    return c.json({ data: { id: sessionID, status: "compacted" } });
-  })
-  .post("/api/session/:sessionID/wait", async (c) => {
-    // Wait for session to be ready (polling endpoint)
-    const { sessionID } = c.req.param();
-    const session = getSession(sessionID);
-    return c.json({
-      data: {
-        id: sessionID,
-        status: session ? "ready" : "not_found",
-        turnCount: session?.turnCount ?? 0,
-      },
-    });
-  })
-  .get("/api/session/:sessionID/context", (c) => {
-    const { sessionID } = c.req.param();
-    const session = getSession(sessionID);
-    return c.json({
-      data: {
-        id: sessionID,
-        tokenCount: 0,
-        messageCount: session?.turnCount ?? 0,
-        contextWindow: 200000,
-      },
-    });
-  });
 
 // --- Permission ---
 // Permission request/reply for tool execution approval.
