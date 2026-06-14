@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Claude Code Headless Server — wrapper script v1.1
+# Claude Code Headless Server — wrapper script v1.2
 # ADR 0003: Single-directory deployment, clean uninstall
+# ADR 0008: OpenCode daemon registration
 # Source: https://github.com/chyun-code/claude-code-headless-server
 
 set -euo pipefail
@@ -10,23 +11,51 @@ PORT="${CLAUDE_SERVER_PORT:-4096}"
 PID_FILE="$SERVER_HOME/.pid"
 LOG_FILE="$SERVER_HOME/server.log"
 
+# OpenCode state directory (xdg-basedir on Linux, fallback on macOS)
+if command -v xdg-state-dir >/dev/null 2>&1; then
+  OPENCODE_STATE="$(xdg-state-dir)/opencode"
+elif [[ -n "${XDG_STATE_HOME:-}" ]]; then
+  OPENCODE_STATE="$XDG_STATE_HOME/opencode"
+else
+  OPENCODE_STATE="$HOME/.local/state/opencode"
+fi
+OPENCODE_SERVER_JSON="$OPENCODE_STATE/server.json"
+OPENCODE_PASSWORD_FILE="$OPENCODE_STATE/password"
+
+# --- Helpers ---
+
+detect_opencode_version() {
+  if command -v opencode >/dev/null 2>&1; then
+    opencode --version 2>/dev/null | head -1 || echo "local"
+  else
+    echo "local"
+  fi
+}
+
+generate_password() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -base64 32
+  else
+    head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32
+  fi
+}
+
 # --- Help ---
 if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
   cat <<EOF
-Claude Code Headless Server  v0.1.1
+Claude Code Headless Server  v0.5.0
 
 Usage: claude-headless-server <command>
 
 Commands:
   start       Start the server (background)
-  stop        Stop the server gracefully
+  stop        Stop the server gracefully and remove OpenCode registration
   status      Show server status (PID + port health)
   restart     Stop + start
+  tui         Start server, register with OpenCode daemon, and launch OpenTUI
   install     Clone repo + install dependencies
   uninstall   Remove everything cleanly (no traces)
   logs        Tail server logs
-  tui         Start server and connect OpenTUI
-  tunnel      SSH port forward (requires tunnel.conf)
 
 Config (environment variables):
   CLAUDE_SERVER_HOME  Server directory (default: ~/.claude-headless-server)
@@ -61,6 +90,7 @@ case "$cmd" in
     echo "   Start:  claude-headless-server start"
     echo "   Stop:   claude-headless-server stop"
     echo "   Status: claude-headless-server status"
+    echo "   TUI:    claude-headless-server tui"
     ;;
 
   start)
@@ -126,19 +156,27 @@ case "$cmd" in
           if ! kill -0 "$pid" 2>/dev/null; then
             echo "✅ Server stopped"
             rm -f "$PID_FILE"
-            exit 0
+            break
           fi
           sleep 1
         done
         # Force kill if still running
-        kill -9 "$pid" 2>/dev/null || true
-        echo "✅ Server force-stopped"
+        if kill -0 "$pid" 2>/dev/null; then
+          kill -9 "$pid" 2>/dev/null || true
+          echo "✅ Server force-stopped"
+        fi
+        rm -f "$PID_FILE"
       else
         echo "Server not running (stale PID file cleaned)"
+        rm -f "$PID_FILE"
       fi
-      rm -f "$PID_FILE"
     else
       echo "Server not running (no PID file)"
+    fi
+    # Remove OpenCode registration so stale server.json does not point to a dead server
+    if [[ -f "$OPENCODE_SERVER_JSON" ]]; then
+      rm -f "$OPENCODE_SERVER_JSON"
+      echo "✅ Removed OpenCode daemon registration"
     fi
     ;;
 
@@ -174,23 +212,53 @@ case "$cmd" in
     ;;
 
   tui)
-    # Check if server is running; start if not
-    if [ ! -f "$PID_FILE" ] || ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-      echo "==> Server not running. Starting..."
-      bash "$0" start
+    if ! command -v opencode >/dev/null 2>&1; then
+      echo "❌ opencode command not found."
+      echo "   Install OpenCode first, then run: claude-headless-server tui"
+      exit 1
     fi
-    cat <<EOF
 
-=== Claude Code Headless Server ===
-Server running on http://localhost:$PORT
+    # Generate password and write OpenCode password file first, so the server
+    # can read it on startup (ADR 0009: file-based password avoids exposing
+    # secrets in shell history or process listings).
+    password=""
+    if [[ -f "$OPENCODE_PASSWORD_FILE" ]]; then
+      password=$(cat "$OPENCODE_PASSWORD_FILE")
+    else
+      password=$(generate_password)
+    fi
 
-To connect OpenTUI:
-  Option 1: Set OPENCODE_SERVER=http://localhost:$PORT then run: claude --opencode
-  Option 2: npx opencode --server http://localhost:$PORT
-  Option 3: Configure your OpenTUI client to use http://localhost:$PORT
+    mkdir -p "$OPENCODE_STATE"
+    chmod 700 "$OPENCODE_STATE"
+    printf '%s' "$password" > "$OPENCODE_PASSWORD_FILE"
+    chmod 600 "$OPENCODE_PASSWORD_FILE"
 
-Stop server with: claude-headless-server stop
-EOF
+    # Start server if not running
+    if [[ ! -f "$PID_FILE" ]] || ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+      echo "==> Server not running. Starting..."
+      "$0" start
+    fi
+
+    pid=$(cat "$PID_FILE")
+    version=$(detect_opencode_version)
+    registration_id=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || echo "claude-code-headless-$(date +%s)")
+
+    # Write OpenCode daemon registration
+    cat > "$OPENCODE_SERVER_JSON" <<REGEOF
+{
+  "id": "$registration_id",
+  "version": "$version",
+  "url": "http://localhost:$PORT",
+  "pid": $pid
+}
+REGEOF
+    chmod 600 "$OPENCODE_SERVER_JSON"
+
+    echo "==> Registered with OpenCode daemon: http://localhost:$PORT"
+    echo "==> Launching OpenTUI..."
+
+    # Exec opencode default command (opens OpenTUI)
+    exec opencode
     ;;
 
   uninstall)
@@ -218,7 +286,7 @@ EOF
 
   *)
     echo "Unknown command: $cmd"
-    echo "Usage: claude-headless-server {install|start|stop|restart|status|logs|uninstall}"
+    echo "Usage: claude-headless-server {install|start|stop|restart|status|logs|tui|uninstall}"
     exit 1
     ;;
 esac
