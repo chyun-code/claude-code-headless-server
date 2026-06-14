@@ -38,6 +38,34 @@ app.use("/*", cors({
   exposeHeaders: ["Content-Type", "Cache-Control"],
 }));
 
+// OpenCode-compatible Basic Auth (optional)
+// Password source priority:
+//   1. OPENCODE_SERVER_PASSWORD env var
+//   2. ~/.local/state/opencode/password file (written by claude-headless-server tui)
+const home = require("os").homedir();
+const fs = require("fs");
+let AUTH_PASSWORD = Bun.env.OPENCODE_SERVER_PASSWORD;
+const pwFile = `${home}/.local/state/opencode/password`;
+if (!AUTH_PASSWORD && fs.existsSync(pwFile)) {
+  AUTH_PASSWORD = fs.readFileSync(pwFile, "utf8").trim();
+}
+const AUTH_USERNAME = Bun.env.OPENCODE_SERVER_USERNAME || "opencode";
+
+if (AUTH_PASSWORD) {
+  app.use("/*", async (c, next) => {
+    if (c.req.method === "OPTIONS") {
+      return await next();
+    }
+    const auth = c.req.header("Authorization");
+    const expected = "Basic " + Buffer.from(AUTH_USERNAME + ":" + AUTH_PASSWORD).toString("base64");
+    if (!auth || auth !== expected) {
+      return c.json({ error: "unauthorized" }, 401);
+    }
+    await next();
+  });
+}
+
+
 app.route("/", healthRoutes);
 app.route("/", sessionRoutes);
 app.route("/", eventRoutes);
