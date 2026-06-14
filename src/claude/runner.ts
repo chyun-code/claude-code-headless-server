@@ -73,3 +73,7 @@ export function runClaude(prompt: string, opts?: ClaudeRunnerOptions): ClaudeRun
 
   return { process: proc, events: eventGenerator() };
 }
+
+// NOTE: Claude Code refuses --permission-mode bypassPermissions when running as root.
+// The server MUST be run as a non-root user for permission bypass to work.
+// Error: "--dangerously-skip-permissions cannot be used with root/sudo privileges"
