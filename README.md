@@ -2,7 +2,7 @@
 
 Programmable HTTP API for Claude Code — semantic integration with OpenTUI. Permission modes, PTY WebSocket proxy, slash commands, tool execution, multi-turn sessions, and clean single-directory deployment.
 
-> **v0.2.0** — Phase 2 complete: PTY WebSocket proxy (node-pty + Bun.spawn fallback), slash command passthrough. Phase 1: core HTTP API + SSE relay + `--resume` multi-turn + permission mode mapping.  
+> **v0.3.0** — Phase 3 complete: SSH tunnel for remote access + OpenTUI compatibility verified. Phase 2: PTY WebSocket + slash commands. Phase 1: core HTTP API + SSE relay + multi-turn + permission mapping.  
 > See [Releases](https://github.com/chyun-code/claude-code-headless-server/releases) | [ADR Index](docs/adr/) | [Issues](https://github.com/chyun-code/claude-code-headless-server/issues)
 
 ## Architecture
@@ -47,6 +47,16 @@ claude-headless-server restart    # Stop + start
 claude-headless-server logs       # Tail server logs
 ```
 
+### Remote Access (via SSH tunnel)
+
+```bash
+claude-headless-server tunnel start    # Start SSH tunnel through bore.pub
+claude-headless-server tunnel status   # Check tunnel status
+claude-headless-server tunnel stop     # Stop tunnel
+```
+
+Requires an active bore.pub tunnel on the host. See [ADR 0004](docs/adr/0004-ssh-tunnel-strategy.md). Server always binds to 127.0.0.1 only.
+
 ## Uninstall
 
 ```bash
@@ -55,7 +65,7 @@ claude-headless-server uninstall
 
 **Removes ONLY `~/.claude-headless-server`.** No other files touched. No scattered config. No /etc pollution. No shell rc modifications. No irreversible system changes. Just one `rm -rf` of a single directory.
 
-## API (v0.2.0)
+## API (v0.3.0)
 
 | Endpoint | Status | Description |
 |---|---|---|
@@ -117,6 +127,8 @@ Mode switches via `PATCH /api/session/:id {permissionMode:acceptEdits}` or per-p
 | [0001](docs/adr/0001-use-hono-and-claude-code-headless.md) | Use Hono + Claude Code Headless |
 | [0002](docs/adr/0002-permission-mode-semantic-mapping.md) | Semantic Permission Mode Mapping |
 | [0003](docs/adr/0003-single-directory-deployment.md) | Single-Directory Deployment & Clean Uninstall |
+| [0004](docs/adr/0004-ssh-tunnel-strategy.md) | SSH Tunnel Strategy & Bore Safety |
+| [0005](docs/adr/0005-opentui-compatibility.md) | OpenTUI Compatibility Interface |
 
 ## License
 
