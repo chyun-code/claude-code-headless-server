@@ -4,7 +4,6 @@ import { createInterface } from "node:readline";
 
 export interface ClaudeRunnerOptions {
   cwd?: string;
-  model?: string;
 }
 
 export type ClaudeEvent =
@@ -40,7 +39,6 @@ export function runClaude(prompt: string, opts?: ClaudeRunnerOptions): ClaudeRun
     "--verbose",
     "-p", prompt,
     "--permission-mode", "acceptEdits",
-    "--no-show-permission-prompts",
   ];
 
   const proc = spawn("claude", args, {
@@ -52,6 +50,14 @@ export function runClaude(prompt: string, opts?: ClaudeRunnerOptions): ClaudeRun
   // Close stdin immediately to prevent "no stdin data" warning
   proc.stdin?.end();
 
+  // Log stderr for debugging
+  proc.stderr?.on("data", (data: Buffer) => {
+    const text = data.toString().trim();
+    if (text && !text.includes("Warning:")) {
+      console.error("[claude stderr]", text.slice(0, 200));
+    }
+  });
+
   const rl = createInterface({ input: proc.stdout!, crlfDelay: Infinity });
 
   async function* eventGenerator(): AsyncGenerator<ClaudeEvent> {
@@ -60,7 +66,7 @@ export function runClaude(prompt: string, opts?: ClaudeRunnerOptions): ClaudeRun
         const parsed = JSON.parse(line) as ClaudeEvent;
         yield parsed;
       } catch {
-        // Skip unparseable lines (stderr noise, etc.)
+        // Skip unparseable lines
       }
     }
   }
