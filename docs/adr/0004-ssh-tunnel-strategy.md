@@ -1,6 +1,6 @@
 # ADR 0004 — SSH Tunnel Strategy & Bore Safety
 
-**Status:** Accepted (2026-06-14)
+**Status:** Superseded by ADR 0006 (2026-06-14) — tunnel is a per-user config concern, not a project feature
 
 ## Context
 

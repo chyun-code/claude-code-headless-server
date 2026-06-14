@@ -2,7 +2,7 @@
 
 Programmable HTTP API for Claude Code — semantic integration with OpenTUI. Permission modes, PTY WebSocket proxy, slash commands, tool execution, multi-turn sessions, and clean single-directory deployment.
 
-> **v0.3.0** — Phase 3 complete: SSH tunnel for remote access + OpenTUI compatibility verified. Phase 2: PTY WebSocket + slash commands. Phase 1: core HTTP API + SSE relay + multi-turn + permission mapping.  
+> **v0.3.0** — Phase 3 complete: OpenTUI compatibility verified. Phase 2: PTY WebSocket + slash commands. Phase 1: core HTTP API + SSE relay + multi-turn + permission mapping.  
 > See [Releases](https://github.com/chyun-code/claude-code-headless-server/releases) | [ADR Index](docs/adr/) | [Issues](https://github.com/chyun-code/claude-code-headless-server/issues)
 
 ## Architecture
@@ -46,16 +46,6 @@ claude-headless-server stop       # Stop server
 claude-headless-server restart    # Stop + start
 claude-headless-server logs       # Tail server logs
 ```
-
-### Remote Access (via SSH tunnel)
-
-```bash
-claude-headless-server tunnel start    # Start SSH tunnel through bore.pub
-claude-headless-server tunnel status   # Check tunnel status
-claude-headless-server tunnel stop     # Stop tunnel
-```
-
-Requires an active bore.pub tunnel on the host. See [ADR 0004](docs/adr/0004-ssh-tunnel-strategy.md). Server always binds to 127.0.0.1 only.
 
 ## Uninstall
 
@@ -127,7 +117,6 @@ Mode switches via `PATCH /api/session/:id {permissionMode:acceptEdits}` or per-p
 | [0001](docs/adr/0001-use-hono-and-claude-code-headless.md) | Use Hono + Claude Code Headless |
 | [0002](docs/adr/0002-permission-mode-semantic-mapping.md) | Semantic Permission Mode Mapping |
 | [0003](docs/adr/0003-single-directory-deployment.md) | Single-Directory Deployment & Clean Uninstall |
-| [0004](docs/adr/0004-ssh-tunnel-strategy.md) | SSH Tunnel Strategy & Bore Safety |
 | [0005](docs/adr/0005-opentui-compatibility.md) | OpenTUI Compatibility Interface |
 
 ## License
