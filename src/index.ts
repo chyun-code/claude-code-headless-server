@@ -5,6 +5,12 @@ import { eventRoutes, eventBus } from "./routes/event";
 import { messageRoutes } from "./routes/message";
 import { ptyRoutes } from "./routes/pty";
 import { healthRoutes } from "./routes/health";
+import {
+  handlePtyUpgrade,
+  handlePtyOpen,
+  handlePtyMessage,
+  handlePtyClose,
+} from "./routes/pty-proxy";
 
 export { eventBus };
 
@@ -31,9 +37,37 @@ app.onError((err, c) => {
 const port = parseInt(process.env.PORT ?? "4096");
 console.error("[server] Claude Code Headless Server starting on port", port);
 
-// Use explicit Bun.serve to set idleTimeout for SSE connections
 Bun.serve({
   port,
   idleTimeout: 0, // disable idle timeout for long-lived SSE
-  fetch: app.fetch,
+
+  fetch(req, server) {
+    // Handle PTY WebSocket upgrades
+    const ptyResponse = handlePtyUpgrade(req, server);
+    if (ptyResponse !== undefined) return ptyResponse;
+
+    // Regular HTTP → Hono
+    return app.fetch(req);
+  },
+
+  websocket: {
+    open(ws) {
+      const data = (ws as unknown as { data?: { ptyID?: string } }).data;
+      if (data?.ptyID) {
+        handlePtyOpen(ws as unknown as Parameters<typeof handlePtyOpen>[0]);
+      }
+    },
+    message(ws, message) {
+      const data = (ws as unknown as { data?: { ptyID?: string } }).data;
+      if (data?.ptyID) {
+        handlePtyMessage(ws as unknown as Parameters<typeof handlePtyMessage>[0], message);
+      }
+    },
+    close(ws) {
+      const data = (ws as unknown as { data?: { ptyID?: string } }).data;
+      if (data?.ptyID) {
+        handlePtyClose(ws as unknown as Parameters<typeof handlePtyClose>[0]);
+      }
+    },
+  },
 });

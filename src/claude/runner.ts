@@ -38,7 +38,7 @@ export function runClaude(prompt: string, opts?: ClaudeRunnerOptions): ClaudeRun
     "--output-format", "stream-json",
     "--verbose",
     "-p", prompt,
-    "--permission-mode", "bypassPermissions",
+    "--permission-mode", "default",
   ];
 
   const proc = spawn("claude", args, {
