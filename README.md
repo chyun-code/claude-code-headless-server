@@ -2,7 +2,7 @@
 
 Programmable HTTP API for Claude Code — semantic integration with OpenTUI. Permission modes, PTY WebSocket proxy, slash commands, tool execution, multi-turn sessions, and clean single-directory deployment.
 
-> **v0.3.0** — Phase 3 complete: OpenTUI compatibility verified. Phase 2: PTY WebSocket + slash commands. Phase 1: core HTTP API + SSE relay + multi-turn + permission mapping.  
+> **v0.4.0** — Phase 4: OpenCode API compatibility layer. Full 18-group API surface. Connect OpenTUI with `claude-headless-server tui`. Phase 3: OpenTUI compatibility verified. Phase 2: PTY WebSocket + slash commands. Phase 1: core HTTP API + SSE relay + multi-turn + permission mapping.  
 > See [Releases](https://github.com/chyun-code/claude-code-headless-server/releases) | [ADR Index](docs/adr/) | [Issues](https://github.com/chyun-code/claude-code-headless-server/issues)
 
 ## Architecture
@@ -55,7 +55,7 @@ claude-headless-server uninstall
 
 **Removes ONLY `~/.claude-headless-server`.** No other files touched. No scattered config. No /etc pollution. No shell rc modifications. No irreversible system changes. Just one `rm -rf` of a single directory.
 
-## API (v0.3.0)
+## API (v0.4.0)
 
 | Endpoint | Status | Description |
 |---|---|---|
@@ -118,6 +118,8 @@ Mode switches via `PATCH /api/session/:id {permissionMode:acceptEdits}` or per-p
 | [0002](docs/adr/0002-permission-mode-semantic-mapping.md) | Semantic Permission Mode Mapping |
 | [0003](docs/adr/0003-single-directory-deployment.md) | Single-Directory Deployment & Clean Uninstall |
 | [0005](docs/adr/0005-opentui-compatibility.md) | OpenTUI Compatibility Interface |
+| [0006](docs/adr/0006-opencode-protocol-integration.md) | OpenCode Backend Protocol Integration |
+| [0007](docs/adr/0007-opencode-compatibility-layer.md) | OpenCode API Compatibility Layer |
 
 ## License
 
