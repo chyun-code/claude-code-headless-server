@@ -52,3 +52,12 @@
 - Multi-session orchestration (Phase 3)
 - Web search, browser tools proxy (Phase 3)
 - Claude Code session fork (`--fork-session`) (Phase 3)
+
+## Progress
+
+| Step | Status | Commit |
+|------|--------|--------|
+| PTY WebSocket | ✅ Done | 5429573 |
+| Slash Commands | ✅ Done | fda9f6f |
+| OpenTUI Test | 🔜 Ready | Issue #10 |
+| v0.2.0 Release | 🔜 Pending test | - |
