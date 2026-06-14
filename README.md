@@ -1,8 +1,8 @@
 # Claude Code Headless Server
 
-Programmable HTTP API for Claude Code — semantic integration with OpenTUI. Permission modes, tool execution, multi-turn sessions, and clean single-directory deployment.
+Programmable HTTP API for Claude Code — semantic integration with OpenTUI. Permission modes, PTY WebSocket proxy, slash commands, tool execution, multi-turn sessions, and clean single-directory deployment.
 
-> 🚧 **Phase 2** 🚧 — OpenTUI integration in progress. v0.1.2 (Phase 1) released.: core HTTP API + SSE relay + `--resume` multi-turn + permission mode mapping.  
+> **v0.2.0** — Phase 2 complete: PTY WebSocket proxy (node-pty + Bun.spawn fallback), slash command passthrough. Phase 1: core HTTP API + SSE relay + `--resume` multi-turn + permission mode mapping.  
 > See [Releases](https://github.com/chyun-code/claude-code-headless-server/releases) | [ADR Index](docs/adr/) | [Issues](https://github.com/chyun-code/claude-code-headless-server/issues)
 
 ## Architecture
@@ -53,9 +53,9 @@ claude-headless-server logs       # Tail server logs
 claude-headless-server uninstall
 ```
 
-**Removes ONLY `~/.claude-headless-server`.** No other files touched. No scattered config. No `/etc` pollution. No shell rc modifications. No irreversible system changes. Just one `rm -rf` of a single directory.
+**Removes ONLY `~/.claude-headless-server`.** No other files touched. No scattered config. No /etc pollution. No shell rc modifications. No irreversible system changes. Just one `rm -rf` of a single directory.
 
-## API (v0.1.2)
+## API (v0.2.0)
 
 | Endpoint | Status | Description |
 |---|---|---|
@@ -67,7 +67,21 @@ claude-headless-server uninstall
 | `POST /api/session/:id/prompt` | ✅ | Send prompt → spawns Claude |
 | `POST /api/session/:id/respond` | ✅ | Accepts permission response (full interactive relay in Phase 2) |
 | `GET /api/event` (SSE) | ✅ | Real-time event stream |
-| `GET /api/pty/:id/connect` (WS) | 🚧 | Basic pipe, PTY emulation in Phase 2 |
+| `GET /api/pty/:id/connect` (WS) | ✅ | Real PTY (node-pty) with Bun.spawn fallback |
+
+## Slash Commands
+
+The server handles these commands inline before forwarding to Claude Code:
+
+| Command | Action |
+|---|---|
+| `/model <name>` | Switch model mid-session |
+| `/permission-mode <mode>` | Change permission mode (default / acceptEdits / bypassPermissions / plan) |
+| `/compact` | Compact session history |
+| `/resume <session-id>` | Resume an existing Claude Code session |
+| `/help` | List available commands |
+
+Unknown commands fall through to Claude Code'''s built-in handler.
 
 ## SSE Event Types
 
@@ -94,7 +108,7 @@ claude-headless-server uninstall
 | `yolo` | `bypassPermissions` | All tools auto-approved |
 | `plan` | `plan` | No tool execution |
 
-Mode switches via `PATCH /api/session/:id {"permissionMode":"acceptEdits"}` or per-prompt: `POST /api/session/:id/prompt {"permissionMode":"...", ...}`.
+Mode switches via `PATCH /api/session/:id {permissionMode:acceptEdits}` or per-prompt: `POST /api/session/:id/prompt {permissionMode:..., ...}`.
 
 ## ADRs
 
