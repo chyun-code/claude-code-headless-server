@@ -2,7 +2,7 @@
 
 Programmable HTTP API for Claude Code — semantic integration with OpenTUI. Permission modes, PTY WebSocket proxy, slash commands, tool execution, multi-turn sessions, and clean single-directory deployment.
 
-> **v0.4.0** — Phase 4: OpenCode API compatibility layer. Full 18-group API surface. Connect OpenTUI with `claude-headless-server tui`. Phase 3: OpenTUI compatibility verified. Phase 2: PTY WebSocket + slash commands. Phase 1: core HTTP API + SSE relay + multi-turn + permission mapping.  
+> **v0.5.0** — Phase 5: `claude --opencode` seamless integration. OpenCode daemon registration, Basic Auth, one-command TUI launch. Full 18-group API surface. Connect OpenTUI with `claude-headless-server tui`. Phase 3: OpenTUI compatibility verified. Phase 2: PTY WebSocket + slash commands. Phase 1: core HTTP API + SSE relay + multi-turn + permission mapping.  
 > See [Releases](https://github.com/chyun-code/claude-code-headless-server/releases) | [ADR Index](docs/adr/) | [Issues](https://github.com/chyun-code/claude-code-headless-server/issues)
 
 ## Architecture
@@ -45,7 +45,38 @@ claude-headless-server status     # Check if running
 claude-headless-server stop       # Stop server
 claude-headless-server restart    # Stop + start
 claude-headless-server logs       # Tail server logs
+claude-headless-server tui        # Launch OpenTUI backed by this server
 ```
+
+### `claude-headless-server tui`
+
+One command to use **Claude Code as the backend** and **OpenTUI as the frontend**:
+
+```bash
+claude-headless-server tui
+```
+
+What it does:
+1. Generates a password and writes it to `~/.local/state/opencode/password`
+2. Starts the headless server on port 4096
+3. Writes an OpenCode daemon registration to `~/.local/state/opencode/server.json`
+4. Executes `opencode`, which opens OpenTUI connected to our server
+
+Requirements: `opencode` must be installed and on your PATH.
+
+To stop:
+
+```bash
+claude-headless-server stop   # Also removes OpenCode daemon registration
+```
+
+## Integration Test
+
+```bash
+./scripts/test-opencode-integration.sh
+```
+
+Verifies Basic Auth, OpenCode daemon registration format, and endpoint compatibility without requiring the `opencode` binary.
 
 ## Uninstall
 
@@ -55,7 +86,7 @@ claude-headless-server uninstall
 
 **Removes ONLY `~/.claude-headless-server`.** No other files touched. No scattered config. No /etc pollution. No shell rc modifications. No irreversible system changes. Just one `rm -rf` of a single directory.
 
-## API (v0.4.0)
+## API (v0.5.0)
 
 | Endpoint | Status | Description |
 |---|---|---|
