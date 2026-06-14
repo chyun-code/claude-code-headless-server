@@ -31,7 +31,9 @@ app.onError((err, c) => {
 const port = parseInt(process.env.PORT ?? "4096");
 console.error("[server] Claude Code Headless Server starting on port", port);
 
-export default {
+// Use explicit Bun.serve to set idleTimeout for SSE connections
+Bun.serve({
   port,
+  idleTimeout: 0, // disable idle timeout for long-lived SSE
   fetch: app.fetch,
-};
+});

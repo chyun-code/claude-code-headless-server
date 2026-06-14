@@ -1,4 +1,3 @@
-
 import { Hono } from "hono";
 import { mapClaudeToOpenCode, type OpenCodeEvent } from "../mapper/events";
 import type { ClaudeEvent } from "../claude/runner";
@@ -35,55 +34,33 @@ export const eventRoutes = new Hono()
     const directory = c.req.query("location[directory]") ?? process.cwd();
     const workspace = c.req.query("location[workspace]");
 
-    let closed = false;
-
     const stream = new ReadableStream({
       start(ctrl) {
-        // Send connected event
         const connected = JSON.stringify({
           id: "evt_" + Date.now().toString(36),
           type: "server.connected",
           location: { directory, workspaceID: workspace },
           data: {},
         });
-        ctrl.enqueue(encoder.encode("event: message
-data: " + connected + "
+        ctrl.enqueue(encoder.encode("event: message\ndata: " + connected + "\n\n"));
 
-"));
-
-        // Subscribe to event bus
         const unsubscribe = eventBus.subscribe("*", (event: OpenCodeEvent) => {
-          if (closed) return;
           if (event.location?.directory === directory ||
               (!event.location && directory === process.cwd())) {
             try {
               const data = JSON.stringify(event);
-              ctrl.enqueue(encoder.encode("event: message
-data: " + data + "
-
-"));
+              ctrl.enqueue(encoder.encode("event: message\ndata: " + data + "\n\n"));
             } catch {
-              closed = true;
+              // stream closed
               unsubscribe();
             }
           }
         });
 
-        // Keep-alive ping every 15s
+        // Keep-alive
         const keepAlive = setInterval(() => {
-          if (!closed) {
-            try { ctrl.enqueue(encoder.encode(": ping
-
-")); } catch { clearInterval(keepAlive); }
-          }
+          try { ctrl.enqueue(encoder.encode(": ping\n\n")); } catch { clearInterval(keepAlive); }
         }, 15000);
-
-        // Cleanup on abort
-        c.req.raw.signal?.addEventListener("abort", () => {
-          closed = true;
-          clearInterval(keepAlive);
-          unsubscribe();
-        });
       },
     });
 
