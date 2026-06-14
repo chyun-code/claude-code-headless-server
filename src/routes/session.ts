@@ -92,6 +92,45 @@ export const sessionRoutes = new Hono()
       ? body.prompt
       : (body.prompt?.text ?? JSON.stringify(body.prompt));
 
+    // Phase 2: Slash command handling (inline to avoid scoping issues)
+    const trimmedCmd = promptText?.trim() ?? "";
+    if (trimmedCmd.startsWith("/")) {
+      const parts = trimmedCmd.split(/\s+/);
+      const cmd = parts[0].toLowerCase();
+      const arg = parts.slice(1).join(" ");
+
+      switch (cmd) {
+        case "/model":
+          if (!arg) return c.json({ data: { command: "model", message: "Usage: /model <model-name>" } });
+          updateSession(sessionID, {} as any);
+          (session as any).model = { providerID: "anthropic", modelID: arg };
+          eventBus.publish(sessionID, { id: `evt_${Date.now().toString(36)}`, type: "session.updated", location: session.location, data: { sessionID, model: session.model, timestamp: new Date().toISOString() } });
+          return c.json({ data: { command: "model", model: session.model, message: `Model set to ${arg}. Next prompt will use this model.` } }, 202);
+
+        case "/permission-mode":
+        case "/permission":
+          if (!arg) return c.json({ data: { command: "permission-mode", current: session.permissionMode, message: "Usage: /permission-mode <default|acceptEdits|bypassPermissions|plan>" } });
+          updateSession(sessionID, { permissionMode: arg as PermissionMode });
+          eventBus.publish(sessionID, { id: `evt_${Date.now().toString(36)}`, type: "session.updated", location: session.location, data: { sessionID, permissionMode: arg, timestamp: new Date().toISOString() } });
+          return c.json({ data: { command: "permission-mode", permissionMode: arg, message: `Permission mode changed to ${arg}.` } }, 202);
+
+        case "/compact":
+          return c.json({ data: { command: "compact", message: "Compact requested." } }, 202);
+
+        case "/resume":
+          if (!arg) return c.json({ data: { command: "resume", message: "Usage: /resume <session-id>" } });
+          updateSession(sessionID, { claudeSessionId: arg });
+          return c.json({ data: { command: "resume", claudeSessionId: arg, message: `Resumed session ${arg}.` } }, 202);
+
+        case "/help":
+          return c.json({ data: { command: "help", commands: ["/model", "/permission-mode", "/compact", "/resume", "/help"] } });
+
+        default:
+          // Unknown slash command — let Claude handle it (fall through)
+          break;
+      }
+    }
+
     // Admit prompt (may update permission mode if provided)
     const result = admitPrompt(sessionID, {
       id: body.id,

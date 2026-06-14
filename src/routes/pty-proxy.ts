@@ -1,12 +1,97 @@
-// PTY WebSocket Proxy v3 — Fixed stdout relay
-// Phase 1: Simple pipe-based PTY with bash
+// PTY WebSocket Proxy — Phase 2: Real terminal emulation
+// Uses node-pty when available, falls back to Bun.spawn pipe.
+// ADR 0003: No files outside server directory.
 
 interface PtySession {
-  ws: any;
-  process: any;
+  ws: any;          // Bun ServerWebSocket
+  pty: any;         // node-pty IPty | Bun Subprocess
+  ptyID: string;
 }
 
 const ptySessions = new Map<string, PtySession>();
+
+// --- PTY Factory ---
+
+function createPty(ws: any, ptyID: string): PtySession | null {
+  // Try node-pty first (real PTY with resize support)
+  try {
+    const pty = require("node-pty");
+    const term = pty.spawn("bash", [], {
+      name: "xterm-256color",
+      cols: 80,
+      rows: 24,
+      cwd: process.cwd(),
+      env: { ...process.env, TERM: "xterm-256color" },
+    });
+
+    const session: PtySession = { ws, pty: term, ptyID };
+
+    term.onData((data: string) => {
+      if (ws.readyState === 1) {
+        ws.send(data);
+      }
+    });
+
+    term.onExit(({ exitCode }: { exitCode: number }) => {
+      console.error(`[pty] bash exited code=${exitCode} for ${ptyID}`);
+      if (ws.readyState === 1) {
+        ws.close();
+      }
+      ptySessions.delete(ptyID);
+    });
+
+    return session;
+  } catch (_) {
+    // node-pty not available, fall back to Bun.spawn pipe
+  }
+
+  // Fallback: Bun.spawn with piped stdio (no PTY, no resize)
+  try {
+    const proc = Bun.spawn(["bash", "--norc"], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, TERM: "xterm-256color" },
+    });
+
+    const session: PtySession = { ws, pty: proc, ptyID };
+
+    // stdout → WS
+    (async () => {
+      const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value && value.length > 0 && ws.readyState === 1) {
+            ws.send(value);
+          }
+        }
+      } catch (_) {}
+    })();
+
+    // stderr → WS
+    (async () => {
+      const reader = (proc.stderr as ReadableStream<Uint8Array>).getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value && value.length > 0 && ws.readyState === 1) {
+            ws.send(value);
+          }
+        }
+      } catch (_) {}
+    })();
+
+    return session;
+  } catch (e) {
+    console.error(`[pty] failed to create PTY:`, e);
+    return null;
+  }
+}
+
+// --- WebSocket Handlers ---
 
 export function handlePtyUpgrade(req: Request, server: any): Response | undefined {
   const url = new URL(req.url);
@@ -29,55 +114,10 @@ export function handlePtyOpen(ws: any) {
 
   console.error(`[pty] WS connected for ${ptyID}`);
 
-  // Use bash with explicit PS1, interactive mode
-  const env = { ...process.env };
-  delete env.PS1; // Let bash set its own
-
-  const proc = Bun.spawn(["bash"], {
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...env, TERM: "xterm-256color" },
-  });
-
-  ptySessions.set(ptyID, { ws, process: proc });
-
-  // Relay stdout → WS using simple read loop
-  (async () => {
-    try {
-      const stdout = proc.stdout as ReadableStream<Uint8Array>;
-      const reader = stdout.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          console.error(`[pty] stdout EOF for ${ptyID}`);
-          break;
-        }
-        if (value && value.length > 0 && ws.readyState === 1) {
-          ws.send(value);
-        }
-      }
-    } catch (e) {
-      console.error(`[pty] stdout error:`, e);
-    }
-  })();
-
-  // Relay stderr → WS
-  (async () => {
-    try {
-      const stderr = proc.stderr as ReadableStream<Uint8Array>;
-      const reader = stderr.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value && value.length > 0 && ws.readyState === 1) {
-          ws.send(value);
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-  })();
+  const session = createPty(ws, ptyID);
+  if (session) {
+    ptySessions.set(ptyID, session);
+  }
 }
 
 export function handlePtyMessage(ws: any, message: string | Buffer) {
@@ -85,13 +125,29 @@ export function handlePtyMessage(ws: any, message: string | Buffer) {
   const session = ptySessions.get(ptyID);
   if (!session) return;
 
-  const data = typeof message === "string"
-    ? new TextEncoder().encode(message)
-    : new Uint8Array(message as Buffer);
+  // Check for resize message (JSON with cols/rows)
+  if (typeof message === "string") {
+    try {
+      const parsed = JSON.parse(message);
+      if (parsed.cols && parsed.rows && typeof session.pty.resize === "function") {
+        session.pty.resize(parsed.cols, parsed.rows);
+        return;
+      }
+    } catch (_) {}
+  }
 
-  const writer = session.process.stdin.getWriter();
-  writer.write(data);
-  writer.releaseLock();
+  // Write to PTY stdin
+  const data = typeof message === "string"
+    ? message
+    : Buffer.from(message).toString();
+
+  if (typeof session.pty.write === "function") {
+    // node-pty
+    session.pty.write(data);
+  } else if (session.pty.stdin && typeof session.pty.stdin.write === "function") {
+    // Bun FileSink
+    session.pty.stdin.write(new TextEncoder().encode(data));
+  }
 }
 
 export function handlePtyClose(ws: any) {
@@ -101,7 +157,11 @@ export function handlePtyClose(ws: any) {
   const session = ptySessions.get(ptyID);
   if (session) {
     console.error(`[pty] closing ${ptyID}`);
-    session.process.kill();
+    try {
+      if (typeof session.pty.kill === "function") {
+        session.pty.kill();
+      }
+    } catch (_) {}
     ptySessions.delete(ptyID);
   }
 }

@@ -2,7 +2,7 @@
 
 Programmable HTTP API for Claude Code — semantic integration with OpenTUI. Permission modes, tool execution, multi-turn sessions, and clean single-directory deployment.
 
-> **v0.1.2** — Phase 1 complete: core HTTP API + SSE relay + `--resume` multi-turn + permission mode mapping.  
+> 🚧 **Phase 2** 🚧 — OpenTUI integration in progress. v0.1.2 (Phase 1) released.: core HTTP API + SSE relay + `--resume` multi-turn + permission mode mapping.  
 > See [Releases](https://github.com/chyun-code/claude-code-headless-server/releases) | [ADR Index](docs/adr/) | [Issues](https://github.com/chyun-code/claude-code-headless-server/issues)
 
 ## Architecture
