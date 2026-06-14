@@ -1,3 +1,5 @@
+// Session Routes — ADR 0002: --resume based multi-turn with permission mode semantic mapping
+
 import { Hono } from "hono";
 import { runClaude } from "../claude/runner";
 import { eventBus } from "./event";
@@ -7,8 +9,10 @@ import {
   getSession,
   listSessions,
   admitPrompt,
+  updateSession,
   addAssistantMessage,
 } from "../store";
+import type { PermissionMode } from "../store";
 
 export const sessionRoutes = new Hono()
   .post("/api/session", async (c) => {
@@ -18,6 +22,7 @@ export const sessionRoutes = new Hono()
       agent: body.agent,
       model: body.model,
       location: body.location ?? { directory: process.cwd() },
+      permissionMode: body.permissionMode ?? "default",
     });
     return c.json({ data: session }, 201);
   })
@@ -27,10 +32,7 @@ export const sessionRoutes = new Hono()
     const limit = c.req.query("limit") ? parseInt(c.req.query("limit")!) : 50;
     const order = (c.req.query("order") as "asc" | "desc" | undefined) ?? "desc";
     const sessions = listSessions({ workspace, limit, order });
-    return c.json({
-      data: sessions,
-      cursor: {},
-    });
+    return c.json({ data: sessions, cursor: {} });
   })
 
   .get("/api/session/:sessionID", (c) => {
@@ -38,6 +40,31 @@ export const sessionRoutes = new Hono()
     const session = getSession(sessionID);
     if (!session) return c.json({ error: "session not found" }, 404);
     return c.json({ data: session });
+  })
+
+  // Update session config (permission mode, model, etc.)
+  .patch("/api/session/:sessionID", async (c) => {
+    const sessionID = c.req.param("sessionID");
+    const session = getSession(sessionID);
+    if (!session) return c.json({ error: "session not found" }, 404);
+
+    const body = await c.req.json().catch(() => ({}));
+    const updated = updateSession(sessionID, {
+      permissionMode: body.permissionMode as PermissionMode | undefined,
+    });
+
+    eventBus.publish(sessionID, {
+      id: `evt_${Date.now().toString(36)}`,
+      type: "session.updated",
+      location: session.location,
+      data: {
+        sessionID,
+        permissionMode: updated?.permissionMode,
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    return c.json({ data: updated });
   })
 
   .post("/api/session/:sessionID/prompt", async (c) => {
@@ -50,11 +77,13 @@ export const sessionRoutes = new Hono()
       ? body.prompt
       : (body.prompt?.text ?? JSON.stringify(body.prompt));
 
+    // Admit prompt (may update permission mode if provided)
     const result = admitPrompt(sessionID, {
       id: body.id,
       prompt: body.prompt,
       delivery: body.delivery,
       resume: body.resume,
+      permissionMode: body.permissionMode as PermissionMode | undefined,
     });
 
     if ("error" in result) return c.json({ error: result.error }, 409);
@@ -84,28 +113,34 @@ export const sessionRoutes = new Hono()
 
     // Spawn Claude Code if resume !== false
     if (body.resume !== false) {
-      // Fire-and-forget: relay Claude Code events
       void (async () => {
         try {
-          console.error("[session] spawning Claude for session", sessionID);
+          const currentSession = getSession(sessionID)!;
+          console.error(`[session] spawning Claude for ${sessionID} (turn ${currentSession.turnCount}, mode: ${currentSession.permissionMode})`);
+
           const { process, events } = runClaude(promptText, {
-            cwd: session.location.directory,
+            cwd: currentSession.location.directory,
+            sessionId: currentSession.claudeSessionId, // --resume for multi-turn
+            permissionMode: currentSession.permissionMode,
           });
 
           let eventCount = 0;
           for await (const ccEvent of events) {
             eventCount++;
-            for (const ocEvent of mapClaudeToOpenCode(ccEvent, sessionID, session.location)) {
+            // Extract Claude session ID from result event for next turn
+            if (ccEvent.type === "result" && ccEvent.session_id) {
+              updateSession(sessionID, { claudeSessionId: ccEvent.session_id });
+            }
+            for (const ocEvent of mapClaudeToOpenCode(ccEvent, sessionID, currentSession.location)) {
               eventBus.publish(sessionID, ocEvent);
             }
           }
-          console.error("[session] Claude relay done for", sessionID, "events:", eventCount);
+          console.error(`[session] Claude relay done for ${sessionID} events: ${eventCount}`);
 
-          // Wait for process exit
           const exitCode = await new Promise<number | null>((resolve) => {
             process.on("exit", resolve);
           });
-          console.error("[session] Claude exited with code", exitCode, "for", sessionID);
+          console.error(`[session] Claude exited with code ${exitCode} for ${sessionID}`);
         } catch (err) {
           console.error("[session] Claude relay error:", err);
         }
@@ -113,6 +148,24 @@ export const sessionRoutes = new Hono()
     }
 
     return c.json({ data: admitted }, 202);
+  })
+
+  // Permission response relay (ADR 0002: OpenTUI → Claude)
+  .post("/api/session/:sessionID/respond", async (c) => {
+    const sessionID = c.req.param("sessionID");
+    const session = getSession(sessionID);
+    if (!session) return c.json({ error: "session not found" }, 404);
+
+    const body = await c.req.json().catch(() => ({}));
+    // Phase 2: write response to Claude stdin (permission flow)
+    // For now, acknowledge the response
+    return c.json({
+      data: {
+        sessionID,
+        response: body.response,
+        status: "acknowledged",
+      },
+    }, 202);
   })
 
   .post("/api/session/:sessionID/compact", (c) => c.body(null, 204))

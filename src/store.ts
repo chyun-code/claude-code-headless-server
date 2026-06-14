@@ -1,22 +1,29 @@
 // In-memory store for sessions and messages.
 // Phase 2: replace with SQLite for durability.
+// ADR 0002: Tracks Claude Code sessionId for --resume multi-turn.
 
 export type SessionID = string;
 export type MessageID = string;
 
+export type PermissionMode = "default" | "acceptEdits" | "bypassPermissions" | "plan";
+
 export interface SessionInfo {
   id: SessionID;
   agent: string;
-  model: string;
+  model: unknown; // { providerID, modelID }
   location: { directory: string; workspaceID?: string; project?: string };
   timeCreated: number;
+  // ADR 0002: Semantic integration fields
+  claudeSessionId?: string;    // Claude Code session ID for --resume
+  permissionMode: PermissionMode; // Maps from OpenTUI mode
+  turnCount: number;
 }
 
 export interface Message {
   id: MessageID;
   sessionID: SessionID;
   role: "user" | "assistant";
-  content: unknown; // OpenCode message content structure
+  content: unknown;
   timeCreated: number;
 }
 
@@ -25,6 +32,7 @@ export interface PromptInput {
   prompt: unknown;
   delivery?: "steer" | "queue";
   resume?: boolean;
+  permissionMode?: PermissionMode; // Per-prompt mode override
 }
 
 function genID(prefix: string): string {
@@ -37,8 +45,9 @@ const messages = new Map<SessionID, Message[]>();
 export function createSession(opts: {
   id?: SessionID;
   agent?: string;
-  model?: string;
+  model?: unknown;
   location?: { directory: string; workspaceID?: string; project?: string };
+  permissionMode?: PermissionMode;
 }): SessionInfo {
   const id = opts.id ?? genID("ses");
   const info: SessionInfo = {
@@ -47,6 +56,8 @@ export function createSession(opts: {
     model: opts.model ?? { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
     location: opts.location ?? { directory: process.cwd() },
     timeCreated: Date.now(),
+    permissionMode: opts.permissionMode ?? "default",
+    turnCount: 0,
   };
   sessions.set(id, info);
   messages.set(id, []);
@@ -55,6 +66,14 @@ export function createSession(opts: {
 
 export function getSession(id: SessionID): SessionInfo | undefined {
   return sessions.get(id);
+}
+
+export function updateSession(id: SessionID, patch: Partial<Pick<SessionInfo, "claudeSessionId" | "permissionMode">>): SessionInfo | undefined {
+  const session = sessions.get(id);
+  if (!session) return undefined;
+  if (patch.claudeSessionId !== undefined) session.claudeSessionId = patch.claudeSessionId;
+  if (patch.permissionMode !== undefined) session.permissionMode = patch.permissionMode;
+  return session;
 }
 
 export function listSessions(opts?: {
@@ -74,6 +93,13 @@ export function admitPrompt(
 ): { id: MessageID; sessionID: SessionID } | { error: string } {
   const session = sessions.get(sessionID);
   if (!session) return { error: "session not found" };
+
+  // Apply per-prompt permission mode override (OpenTUI mode switch)
+  if (input.permissionMode) {
+    session.permissionMode = input.permissionMode;
+  }
+
+  session.turnCount++;
   const id = input.id ?? genID("msg");
   const msg: Message = {
     id,
