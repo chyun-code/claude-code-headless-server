@@ -2,11 +2,9 @@ import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
-
 export interface ClaudeRunnerOptions {
   cwd?: string;
   model?: string;
-  permissionMode?: string;
 }
 
 export type ClaudeEvent =
@@ -41,8 +39,9 @@ export function runClaude(prompt: string, opts?: ClaudeRunnerOptions): ClaudeRun
     "--output-format", "stream-json",
     "--verbose",
     "-p", prompt,
+    "--permission-mode", "acceptEdits",
+    "--no-show-permission-prompts",
   ];
-
 
   const proc = spawn("claude", args, {
     cwd: opts?.cwd ?? process.cwd(),
@@ -50,14 +49,8 @@ export function runClaude(prompt: string, opts?: ClaudeRunnerOptions): ClaudeRun
     stdio: ["pipe", "pipe", "pipe"],
   });
 
-  proc.on("error", (err) => {
-  });
-
-  proc.stderr?.on("data", (data) => {
-  });
-
-  proc.on("exit", (code) => {
-  });
+  // Close stdin immediately to prevent "no stdin data" warning
+  proc.stdin?.end();
 
   const rl = createInterface({ input: proc.stdout!, crlfDelay: Infinity });
 
@@ -66,7 +59,8 @@ export function runClaude(prompt: string, opts?: ClaudeRunnerOptions): ClaudeRun
       try {
         const parsed = JSON.parse(line) as ClaudeEvent;
         yield parsed;
-      } catch (e) {
+      } catch {
+        // Skip unparseable lines (stderr noise, etc.)
       }
     }
   }
