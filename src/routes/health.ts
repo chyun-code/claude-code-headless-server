@@ -2,5 +2,11 @@ import { Hono } from "hono";
 
 export const healthRoutes = new Hono()
   .get("/api/health", (c) => {
-    return c.json({ status: "ok", version: "0.1.0", backend: "claude-code-headless" });
+    // OpenCode compatibility: OpenTUI/claude --opencode checks response.data.healthy === true
+    return c.json({
+      healthy: true,
+      status: "ok",
+      version: "0.5.0",
+      backend: "claude-code-headless",
+    });
   });
