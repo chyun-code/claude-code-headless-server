@@ -1,93 +1,81 @@
-🚧 **Phase 1 — Claude Code Headless Server** 🚧
+# Claude Code Headless Server
 
-Programmable HTTP API for Claude Code — semantic integration with OpenTUI, not emulation. Full Claude Code functionality preserved: permission modes, slash commands, tool execution.
+Programmable HTTP API for Claude Code — semantic integration with OpenTUI. **Full Claude Code functionality preserved:** permission modes, slash commands, tool execution, multi-turn sessions.
 
-> **Phase 1 branch.** WIP — see [ADR 0002](docs/adr/0002-permission-mode-semantic-mapping.md) for current architecture.  
-> Tracking: [Phase 1 Issues](https://github.com/chyun-code/claude-code-headless-server/issues?q=label%3Aphase-1) | [ADR Index](docs/adr/) | Session: @session
+> **v0.1.0** — Phase 1 complete: core HTTP API + SSE relay + --resume multi-turn + permission mode mapping.  
+> See [CHANGELOG](#) | [ADR Index](docs/adr/) | [Issues](https://github.com/chyun-code/claude-code-headless-server/issues)
 
-## Goal
-
-OpenTUI + Claude Code = **semantic integration with zero functionality loss**.  
-Every Claude Code behavior must have a meaningful OpenTUI counterpart.
+## Architecture
 
 ```
-┌─────────┐  prompt    ┌──────────────┐  stdin     ┌────────────┐
+┌─────────┐  prompt    ┌──────────────┐  --resume  ┌────────────┐
 │ OpenTUI │ ─────────→ │  Headless    │ ─────────→ │ Claude Code│
 │         │ ←───────── │  Server      │ ←───────── │            │
-│         │  SSE event │  (Bun+Hono)  │  NDJSON    │ (interactive│
-│         │            │              │            │  mode)     │
-│  mode   │ ─────────→ │  permission  │ ─────────→ │ /slash     │
-│  switch │ ←───────── │  mode relay  │ ←───────── │  commands  │
+│         │  SSE event │  (Bun+Hono)  │  NDJSON    │ (stream)   │
+│  mode   │ ─────────→ │  permission  │ ─────────→ │ --resume   │
+│  switch │ ←───────── │  mode relay  │ ←───────── │  sessions  │
 └─────────┘            └──────────────┘            └────────────┘
 ```
 
-## Architecture Decision: Interactive Mode (Not `-p`)
-
-ADR 0002 updated: Claude Code runs in **persistent interactive mode** with open stdin, not one-shot `-p`. This enables:
-
-- Permission prompt relay (Claude asks → OpenTUI dialog → user approves → Claude executes)
-- Slash command passthrough (`/model`, `/compact`, `/resume`, `/fork-session`, etc.)
-- Permission mode semantic mapping (OpenTUI modes ↔ Claude Code modes)
-
-| OpenTUI Mode | Claude Code Mode |
-|---|---|
-| `default` | `default` (prompt per tool) |
-| `auto-edit` | `acceptEdits` |
-| `yolo` | `bypassPermissions` |
-| `plan` | `plan` |
+Each prompt is a fresh `claude -p` invocation. Session continuity via `--resume`. Permission modes map semantically between OpenTUI and Claude Code.
 
 ## Quick Start
 
 ```bash
-# Requirements: Bun, Claude Code CLI (authenticated), non-root user
-git clone https://github.com/chyun-code/claude-code-headless-server
-cd claude-code-headless-server
 bun install
 bun run src/index.ts
 # Server on http://localhost:4096
 ```
 
-> **Important:** Claude Code refuses `bypassPermissions` when running as **root**. Run as non-root user. See [#4](https://github.com/chyun-code/claude-code-headless-server/issues/4).
+> **Requirements:** Bun, Claude Code CLI (authenticated). Non-root user recommended for `bypassPermissions` mode.
 
-## API
+## API (v0.1.0)
 
-| Endpoint | Phase 1 Status |
+| Endpoint | Status | Description |
+|---|---|---|
+| `GET /api/health` | ✅ | Health check |
+| `POST /api/session` | ✅ | Create session (accepts `permissionMode`) |
+| `GET /api/session` | ✅ | List sessions |
+| `GET /api/session/:id` | ✅ | Session info |
+| `PATCH /api/session/:id` | ✅ | Update mode/config |
+| `POST /api/session/:id/prompt` | ✅ | Send prompt → spawns Claude |
+| `POST /api/session/:id/respond` | ✅ | Permission response (Phase 2 full relay) |
+| `GET /api/event` (SSE) | ✅ | Real-time event stream |
+| `GET /api/pty/:id/connect` (WS) | 🚧 | Basic pipe, PTY emulation in Phase 2 |
+
+## SSE Event Types
+
+| Event | When |
 |---|---|
-| `GET /api/health` | ✅ Done |
-| `POST /api/session` | ✅ Done |
-| `GET /api/session` | ✅ Done |
-| `GET /api/session/:id` | ✅ Done |
-| `POST /api/session/:id/prompt` | ✅ Done (Claude spawn) |
-| `GET /api/event` (SSE) | ✅ Done (NDJSON→SSE relay) |
-| `POST /api/session/:id/respond` | 🚧 Permission reply (ADR 0002) |
-| `GET /api/pty/:id/connect` (WS) | 🚧 Basic pipe, needs PTY emulation |
-| `POST /api/session/:id/compact` | ❌ Phase 2 |
-| `GET /api/session/:id/context` | ❌ Phase 2 |
+| `server.connected` | SSE connection established |
+| `session.next.prompt.admitted` | Prompt accepted |
+| `session.next.agent.switched` | Claude Code ready |
+| `session.next.step.started` | Claude begins processing |
+| `session.next.reasoning.*` | Claude thinking (started/delta/ended) |
+| `session.next.tool.called` | Tool invocation |
+| `session.next.tool.success` | Tool result |
+| `session.next.text.*` | Text response (started/delta/ended) |
+| `session.next.step.ended` | Turn complete (cost, tokens) |
+| `session.next.tool.permission_denied` | Tool blocked by permission mode |
+| `session.updated` | Mode/config changed |
 
-## Phase 1 Scope
+## Permission Mode Mapping
 
-- [x] Session CRUD + prompt admission
-- [x] Claude Code spawn + stream-json parsing
-- [x] NDJSON → OpenCode SSE event mapping
-- [x] Raw ReadableStream SSE (no Hono buffering)
-- [x] idleTimeout: 0 for long-lived connections
-- [x] ADR 0001 (Hono + headless architecture)
-- [x] ADR 0002 (permission mode semantic mapping)
-- [ ] Interactive Claude Code mode (no `-p`, open stdin)
-- [ ] Permission prompt relay (Claude→SSE→OpenTUI→stdin)
-- [ ] Slash command passthrough
-- [ ] OpenTUI mode ↔ Claude Code mode mapping
-- [ ] PTY WebSocket with terminal emulation
-- [ ] Session persistence (`--resume`/`--continue`)
-- [ ] SQLite persistent storage
-- [ ] Multi-client concurrent session testing
+| OpenTUI Mode | Claude Code Mode | Behavior |
+|---|---|---|
+| `default` | `default` | Bash auto-approved, Read/Write prompt user |
+| `auto-edit` | `acceptEdits` | File edits auto-approved |
+| `yolo` | `bypassPermissions` | All tools auto-approved |
+| `plan` | `plan` | No tool execution |
+
+Mode switches via `PATCH /api/session/:id {"permissionMode":"acceptEdits"}` or per-prompt: `POST /api/session/:id/prompt {"permissionMode":"...", ...}`.
 
 ## ADRs
 
-| # | Title | Status |
-|---|---|---|
-| [0001](docs/adr/0001-use-hono-and-claude-code-headless.md) | Use Hono + Claude Code Headless | Accepted |
-| [0002](docs/adr/0002-permission-mode-semantic-mapping.md) | Semantic Permission Mode Mapping | Accepted |
+| # | Title |
+|---|---|
+| [0001](docs/adr/0001-use-hono-and-claude-code-headless.md) | Use Hono + Claude Code Headless |
+| [0002](docs/adr/0002-permission-mode-semantic-mapping.md) | Semantic Permission Mode Mapping |
 
 ## License
 
