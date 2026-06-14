@@ -46,8 +46,6 @@ export function* mapClaudeToOpenCode(
       if (event.subtype === "init") {
         yield {
           ...base,
-          type: "server.connected",
-          data: {},
         };
         yield {
           ...base,
